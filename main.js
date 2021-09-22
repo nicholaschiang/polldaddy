@@ -5,9 +5,12 @@ const progress = require('cli-progress');
 const randomUserAgent = require('random-useragent');
 const Bottleneck = require('bottleneck');
 
+const POLL = 10924113;
+const OPTION = 50270630;
+
 async function main(total = 10) {
   console.log(`Voting ${total} times...`);
-  // Wait 6secs in between votes because of Poll Daddy's rate limits.
+  // Wait 6 secs in between votes because of Poll Daddy's rate limits.
   // @see {@link https://bit.ly/2W0xzsN}
   const limiter = new Bottleneck({ maxConcurrent: 1, minTime: 6000 });
   let count = 0;
@@ -27,25 +30,31 @@ async function main(total = 10) {
   await Promise.all(
     Array(total).fill(null).map((_, id) =>
       limiter.schedule({ id }, async () => {
-        const cfg = { headers: { 'User-Agent': randomUserAgent.getRandom() } };
-        const { data: html } = await axios.get('https://poll.fm/10924113', cfg);
-        const doc = new JSDOM(html).window.document;
+        const headers = {
+          'Accept': '*/*',
+          'Accept-Language': 'en-US,en;q=0.5',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+          'DNT': 1,
+          'Host': 'poll.fm',
+          'Pragma': 'no-cache',
+          'Referer': `https://poll.fm/${POLL}`,
+          'Sec-Fetch-Dest': 'empty',
+          'Sec-Fetch-Mode': 'cors',
+          'Sec-Fetch-Site': 'same-origin',
+          'TE': 'trailers',
+          'User-Agent': 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:91.0) Gecko/20100101 Firefox/91.0',
+        };
+        const res = await axios.get(`https://poll.fm/${POLL}`, { headers });
+        headers['Cookie'] = res.headers['set-cookie'][0].split('; ')[0];
+        const doc = new JSDOM(res.data).window.document;
         const btn = doc.querySelector('.vote-button');
         const data = JSON.parse(btn.dataset.vote);
-        await axios.get('https://poll.fm/vote', {
-          params: {
-            va: 20,
-            pt: 0,
-            r: 0,
-            p: 10924113,
-            a: '50270630,',
-            o: '',
-            t: data.t,
-            token: data.n,
-            pz: 1,
-          },
-          ...cfg
-        });
+        const pz = doc.querySelector('input[name="pz"]').value || 1;
+        const url =
+          `https://poll.fm/vote?va=${data.at}&pt=${data.m}&r=${data.b}` +
+          `&p=${data.id}&a=${OPTION}&o=&t=${data.t}&token=${data.n}&pz=${pz}`;
+        await axios.get(url, { headers });
       })
     )
   );
